@@ -12,7 +12,7 @@ build:
 
     tests:
         override:
-            - command: make test
+            - command: make test coverage-concat
               coverage:
                   file: 'coverage/full'
                   format: 'go-cc'
@@ -21,3 +21,5 @@ build:
         override:
             - curl https://glide.sh/get | sh
             - glide update
+            - mkdir -p coverage
+
