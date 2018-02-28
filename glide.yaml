@@ -1,0 +1,11 @@
+package: github.com/btccom/wallet-core
+import:
+- package: github.com/golang/protobuf
+  subpackages:
+  - protobuf
+  - protoc-gen-go
+- package: github.com/stretchr/testify
+  version: 298d42c2d106c973e776e257d7dadd5fe9e8a88f
+  repo: https://github.com/rubensayshi/testify
+  subpackages:
+  - assert
