@@ -1,57 +1,69 @@
 package bip70
 
 import (
-	"time"
 	"crypto/x509"
-	"github.com/bip70/bip70-go/pkg/protobuf/payments"
 	"errors"
+	"github.com/bip70/bip70-go/pkg/protobuf/payments"
 	"github.com/golang/protobuf/proto"
+	"time"
 )
 
+var (
+	// ErrNoCertificates is returned when certificate chain
+	// validation is attempted but with no certificates
+	ErrNoCertificates = errors.New("no certificates in bundle")
+
+	// ErrEmptySignature is returned when the signature field
+	// is empty
+	ErrEmptySignature = errors.New("empty signature")
+)
+
+// ValidationConfig captures high level validation
+// configuration. If RootPool is empty, the system
+// store is used as a default. See x509.VerifyOptions
+// for additional information, this struct exists to
+// supplement details not known by parsing X509 certs,
+// to constrain validation, or to unit test (current time)
 type ValidationConfig struct {
-	DnsName   string
+	DNSName   string
 	Time      time.Time
 	RootPool  *x509.CertPool
 	KeyUsages []x509.ExtKeyUsage
 }
 
+// CheckerInterface is a type capable of validating
+// a certificate chain, and validate x509 signatures
 type CheckerInterface interface {
-	ValidateChain(cfg *ValidationConfig, derCerts *payments.X509Certificates) (
-		[][]*x509.Certificate, error)
-	ValidateSignature(cert *x509.Certificate, req *payments.PaymentRequest) (
-	error)
+	// ValidateChain takes a validation config, and a set of
+	// certificates, and returns a set of valid chains to
+	// the entity certificate, or an error.
+	ValidateChain(cfg *ValidationConfig, derCerts *payments.X509Certificates) ([][]*x509.Certificate, error)
+
+	// ValidateSignature takes a certificate, and a
+	// payment request, and validates the signature.
+	// An error is returned if the signature is invalid.
+	ValidateSignature(cert *x509.Certificate, req *payments.PaymentRequest) error
 }
 
+// X509Checker implements the CheckerInterface
+// performing actual validation on inputs.
 type X509Checker struct {
 }
 
-func (c *X509Checker) ValidateChain(cfg *ValidationConfig,
-	certs *payments.X509Certificates) ([][]*x509.Certificate, error) {
-	nIn := len(certs.Certificate)
-	if nIn < 1 {
-		return nil, ErrNoCertificates
-	}
+// ValidateChain - see CheckerInterface.ValidateChain
+func (c *X509Checker) ValidateChain(cfg *ValidationConfig, certs *payments.X509Certificates) ([][]*x509.Certificate, error) {
 
-	entityCert, err := x509.ParseCertificate(certs.Certificate[0])
+	entityCert, intermediates, err := ParseX509Certificates(certs)
 	if err != nil {
 		return nil, err
 	}
 
-	intermediates := x509.NewCertPool()
-	for i := 1; i < nIn; i++ {
-		intermediate, err := x509.ParseCertificate(certs.Certificate[i])
-		if err != nil {
-			return nil, err
-		}
-		intermediates.AddCert(intermediate)
-	}
-
 	chains, err := entityCert.Verify(x509.VerifyOptions{
-		DNSName: cfg.DnsName,
-		Roots: cfg.RootPool,
+		DNSName:       cfg.DNSName,
+		Roots:         cfg.RootPool,
 		Intermediates: intermediates,
-		CurrentTime: cfg.Time,
-		KeyUsages: cfg.KeyUsages,
+		CurrentTime:   cfg.Time,
+		KeyUsages:     cfg.KeyUsages,
 	})
 	if err != nil {
 		return nil, err
@@ -59,10 +71,11 @@ func (c *X509Checker) ValidateChain(cfg *ValidationConfig,
 
 	return chains, nil
 }
-func (c *X509Checker) ValidateSignature(cert *x509.Certificate,
-	req *payments.PaymentRequest) error {
+
+// ValidateSignature - see CheckerInterface.ValidateSignature
+func (c *X509Checker) ValidateSignature(cert *x509.Certificate, req *payments.PaymentRequest) error {
 	if len(req.GetSignature()) < 1 {
-		return errors.New("empty signature")
+		return ErrEmptySignature
 	}
 
 	sigAlg, _, err := GetSignatureAlgorithm(req.GetPkiType(), cert)
@@ -70,11 +83,7 @@ func (c *X509Checker) ValidateSignature(cert *x509.Certificate,
 		return err
 	}
 
-	clone := proto.Clone(req)
-	reqCpy, ok := clone.(*payments.PaymentRequest)
-	if !ok {
-		return errors.New("failed to clone request")
-	}
+	reqCpy := proto.Clone(req).(*payments.PaymentRequest)
 	reqCpy.Signature = []byte{}
 
 	signData, err := proto.Marshal(reqCpy)

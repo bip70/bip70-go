@@ -31,4 +31,3 @@ const (
 	// response
 	MimeTypePaymentAck = "application/bitcoin-paymentack"
 )
-
