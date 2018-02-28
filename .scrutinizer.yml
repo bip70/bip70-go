@@ -1,0 +1,23 @@
+checks:
+    go: true
+filter:
+    excluded_paths:
+        - "pkg/*/*_test.go"
+        - "pkg/protobuf/payments/*.pb.go"
+
+build:
+    environment:
+        go:
+            version: go1.9.2
+
+    tests:
+        override:
+            - command: make test
+              coverage:
+                  file: 'coverage/full'
+                  format: 'go-cc'
+
+    dependencies:
+        override:
+            - curl https://glide.sh/get | sh
+            - glide update
