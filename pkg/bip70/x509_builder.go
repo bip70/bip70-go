@@ -15,7 +15,6 @@ import (
 // This is the pkiType, private key, entity certificate,
 // and intermediate certificate list.
 func NewX509Builder(pkiType string, priv crypto.PrivateKey, cert *x509.Certificate, intermediates []*x509.Certificate) (*X509Builder, error) {
-
 	_, hashFunc, err := GetSignatureAlgorithm(pkiType, cert)
 	if err != nil {
 		return nil, err
